@@ -20,6 +20,7 @@ def vlun(q,df):
     while q.empty() is not True:
         urltarget = q.get()
         #print(urltarget)
+        '''
         rar_byte = '526172'
         zip_byte = '504b03'
         gz_byte = '1f8b080000000000000b'
@@ -30,9 +31,10 @@ def vlun(q,df):
         other_byte = '2d2d202d2d2d2d2d2d2d'
         navicat_MDT_byte = '2f2a0a4e617669636174'
         tar_gz_byte = '1f8b0800'
+        '''
         try:
             r = requests.get(url=urltarget, headers=headers, timeout=timeout, allow_redirects=False, stream=True, verify=False)
-            content = b2a_hex(r.raw.read(10)).decode()
+            #content = b2a_hex(r.raw.read(10)).decode()
 
             if r.status_code == 200:
                 rarsize = int(r.headers.get('Content-Length'))
@@ -45,10 +47,13 @@ def vlun(q,df):
                 else:
                     unit = int(rarsize) // 1024
                     rarsize = str(unit) + 'K'
+                '''
                 if content.startswith(rar_byte) or content.startswith(zip_byte) or content.startswith(gz_byte) or content.startswith(
                         mysqldump_byte) or content.startswith(
                         phpmyadmin_byte) or content.startswith(navicat_byte) or content.startswith(adminer_byte) or content.startswith(
                     other_byte) or content.startswith(navicat_MDT_byte) or content.startswith(tar_gz_byte):
+                '''
+                if int(unit)>0:
                     logging.warning('[ success ] {}  size:{}'.format(urltarget, rarsize))
                     with open(df, 'a') as f:
                         try:
