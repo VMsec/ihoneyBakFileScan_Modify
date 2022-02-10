@@ -4,6 +4,8 @@
 
 增加备份文件fuzz规则
 
+修改备份文件大小判断方式（hurry-filesize）
+
 修改备份文件是否存在的判断规则
 
 修改为多线程扫描，内存占用更小
@@ -39,6 +41,7 @@ requests  2.19.1
 ```
 安装第三方依赖库：
 pip3.5 install requests
+pip3 install hurry-filesize
 ```
 
 ##### 1.3 工具核心：
