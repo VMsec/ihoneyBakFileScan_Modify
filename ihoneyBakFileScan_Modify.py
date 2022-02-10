@@ -10,6 +10,7 @@ from queue import Queue
 from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import datetime
+from hurry.filesize import size
 
 requests.packages.urllib3.disable_warnings()
 
@@ -36,7 +37,8 @@ def vlun(q,df):
             r = requests.get(url=urltarget, headers=headers, timeout=timeout, allow_redirects=False, stream=True, verify=False)
             #content = b2a_hex(r.raw.read(10)).decode()
 
-            if r.status_code == 200:
+            if (r.status_code == 200)&('html' not in r.headers.get('Content-Type')):
+                '''
                 rarsize = int(r.headers.get('Content-Length'))
                 if rarsize >= 1024000000:
                     unit = int(rarsize) // 1024 // 1024 / 1000
@@ -47,14 +49,15 @@ def vlun(q,df):
                 else:
                     unit = int(rarsize) // 1024
                     rarsize = str(unit) + 'K'
-                '''
                 if content.startswith(rar_byte) or content.startswith(zip_byte) or content.startswith(gz_byte) or content.startswith(
                         mysqldump_byte) or content.startswith(
                         phpmyadmin_byte) or content.startswith(navicat_byte) or content.startswith(adminer_byte) or content.startswith(
                     other_byte) or content.startswith(navicat_MDT_byte) or content.startswith(tar_gz_byte):
                 #if int(unit)>0:
                 '''
-                if (int(unit)>0)&('html' not in r.headers.get('Content-Type')):
+                tmp_rarsize = int(r.headers.get('Content-Length'))
+                rarsize = str(size(tmp_rarsize))                
+                if (int(rarsize[0:-1])>0):
                     logging.warning('[ success ] {}  size:{}'.format(urltarget, rarsize))
                     with open(df, 'a') as f:
                         try:
