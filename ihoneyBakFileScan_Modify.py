@@ -176,7 +176,7 @@ if __name__ == '__main__':
     datefile = datetime.now().strftime('%Y%m%d_%H-%M-%S.txt')
 
     headers = {'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36", }
-    timeout = 5
+    timeout = 10
 
 
     try:
