@@ -52,8 +52,9 @@ def vlun(q,df):
                         mysqldump_byte) or content.startswith(
                         phpmyadmin_byte) or content.startswith(navicat_byte) or content.startswith(adminer_byte) or content.startswith(
                     other_byte) or content.startswith(navicat_MDT_byte) or content.startswith(tar_gz_byte):
+                #if int(unit)>0:
                 '''
-                if int(unit)>0:
+                if (int(unit)>0)&('html' not in r.headers.get('Content-Type')):
                     logging.warning('[ success ] {}  size:{}'.format(urltarget, rarsize))
                     with open(df, 'a') as f:
                         try:
