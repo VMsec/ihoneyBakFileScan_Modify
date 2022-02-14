@@ -1,4 +1,4 @@
-# ihoneyBakFileScan_Modify 多进程批量网站备份文件泄露扫描工具
+# ihoneyBakFileScan_Modify 批量网站备份文件泄露扫描工具
 
 # 2022.2.8 添加、修改内容
 
