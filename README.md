@@ -13,7 +13,7 @@
 经测试 1h1g vps 500线程可以拉满
 
 ```
-python3 bakfilescan.py -t 500 -f url.txt
+python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt
 ```
 
 
