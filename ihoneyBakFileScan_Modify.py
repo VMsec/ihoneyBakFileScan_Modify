@@ -187,7 +187,7 @@ if __name__ == '__main__':
             # Custom scan dictionary
             # This mode is not recommended for bulk scans. It is prone to false positives and can reduce program efficiency.
             custom_dict = list(set([i.replace("\n", "") for i in open(str(args.dict_file), "r").readlines()]))
-            info_dic = info_dic.extend(custom_dict)
+            info_dic.extend(custom_dict)
         if args.url:
             dispatcher(url=args.url, max_thread=args.max_threads, dic=info_dic)
         elif args.url_file:
