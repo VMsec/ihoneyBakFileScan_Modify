@@ -37,7 +37,7 @@ def vlun(q,df):
             r = requests.get(url=urltarget, headers=headers, timeout=timeout, allow_redirects=False, stream=True, verify=False)
             #content = b2a_hex(r.raw.read(10)).decode()
 
-            if (r.status_code == 200)&('html' not in r.headers.get('Content-Type')):
+            if (r.status_code == 200)&('html' not in r.headers.get('Content-Type'))&('xml' not in r.headers.get('Content-Type'))&('json' not in r.headers.get('Content-Type'))&('javascript' not in r.headers.get('Content-Type')):
                 '''
                 rarsize = int(r.headers.get('Content-Length'))
                 if rarsize >= 1024000000:
