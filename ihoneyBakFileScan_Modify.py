@@ -109,9 +109,9 @@ def dispatcher(url_file=None, url=None, max_thread=1, dic=None):
 
 
 if __name__ == '__main__':
-    usageexample = '\n       Example: python3 ihoneyBakFileScan_Modify.py -t 100 -f url.txt\n'
+    usageexample = '\n       Example: python3 ihoneyBakFileScan_Modify.py -t 100 -f url.txt -o result.txt\n'
     usageexample += '                '
-    usageexample += 'python3 ihoneyBakFileScan_Modify.py -u https://www.example.com/'
+    usageexample += 'python3 ihoneyBakFileScan_Modify.py -u https://www.example.com/ -o result.txt'
 
     parser = ArgumentParser(add_help=True, usage=usageexample, description='A Website Backup File Leak Scan Tool.')
     parser.add_argument('-f', '--url-file', dest="url_file", help="Example: url.txt")
