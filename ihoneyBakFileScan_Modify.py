@@ -30,7 +30,7 @@ def vlun(urltarget):
         else:           
             logging.warning('[ fail ] {}'.format(urltarget))
     except Exception as e:
-        pass
+        logging.warning('[ fail ] {}'.format(urltarget))
 
 def urlcheck(target=None, ulist=None):
     if target is not None and ulist is not None:
