@@ -46,8 +46,6 @@ python3
 ```
 2. 根据域名自动生成相关扫描字典:
 ```
-python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com  -o result.txt
-
 python3 ihoneyBakFileScan_Modify.py -u https://baidu.com -t 1000 -o test.txt
 ['baidu.com', 'baiducom', 'baidu_com', 'com', 'com', 'com', 'baidu', 'com']
 
@@ -59,7 +57,6 @@ python3 ihoneyBakFileScan_Modify.py -u https://aaa.www.baidu.com -t 1000 -o test
 
 python3 ihoneyBakFileScan_Modify.py -u https://aaa.bbb.www.baidu.com -t 1000 -o test.txt
 ['aaa.bbb.www.baidu.com', 'aaabbbwwwbaiducom', 'aaa_bbb_www_baidu_com', 'bbbwwwbaiducom', 'bbb.www.baidu.com', 'bbb_www_baidu_com', 'aaa', 'bbb']
-
 ```
 3. 常见备份文件名，字典于代码中可自行切换,:
 ```
@@ -69,7 +66,7 @@ tmp_info_dic = ['1','127.0.0.1','2010','2011','2012','2013','2014','2015','2016'
 #130
 #tmp_info_dic = ['__zep__/js','0','00','000','012','1','111','123','127.0.0.1','2','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','234','3','333','4','444','5','555','6','666','7','777','8','888','9','999','a','about','admin','app','application','archive','asp','aspx','auth','b','back','backup','backups','bak','bbs','beifen','bin','cache','clients','code','com','config','core','customers','dat','data','database','db','download','dump','engine','error_log','extend','files','forum','ftp','home','html','img','include','index','install','joomla','js','jsp','local','login','localhost','master','media','members','my','mysql','new','old','orders','output','package','php','public','root','runtime','sales','server','shujuku','site','sjk','sql','store','tar','template','test','upload','user','users','vb','vendor','wangzhan','web','website','wordpress','wp','www','wwwroot','wz','数据库','数据库备份','网站','网站备份']
 ```
-4. 自动记录扫描成功的备份地址到以时间命名的文件
+4. 自动记录扫描成功的备份地址到指定的文件
 ```
 例如 result.txt
 
