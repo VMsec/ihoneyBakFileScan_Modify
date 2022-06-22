@@ -2,6 +2,8 @@
 
 # 2022.6.22 添加、修改内容
 
+增加结果写入指定文件名
+
 增加域名扫描规则
 
 修复多线程扫描死锁的bug，改为线程池
@@ -19,7 +21,7 @@
 经测试 1h1g vps 500线程可以拉满
 
 ```
-python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt
+python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
 ```
 
 ## 1. 简介
@@ -51,9 +53,20 @@ pip3 install hurry-filesize
 ```
 2. 根据域名自动生成相关扫描字典:
 ```
-python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com
+python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com  -o result.txt
 
+python3 ihoneyBakFileScan_Modify.py -u https://baidu.com -t 1000 -o test.txt
+['baidu.com', 'baiducom', 'baidu_com', 'com', 'com', 'com', 'baidu', 'com']
+
+python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com -t 1000 -o test.txt
 ['www.baidu.com', 'wwwbaiducom', 'www_baidu_com', 'baiducom', 'baidu.com', 'baidu_com', 'www', 'baidu']
+
+python3 ihoneyBakFileScan_Modify.py -u https://aaa.www.baidu.com -t 1000 -o test.txt
+['aaa.www.baidu.com', 'aaawwwbaiducom', 'aaa_www_baidu_com', 'wwwbaiducom', 'www.baidu.com', 'www_baidu_com', 'aaa', 'www']
+
+python3 ihoneyBakFileScan_Modify.py -u https://aaa.bbb.www.baidu.com -t 1000 -o test.txt
+['aaa.bbb.www.baidu.com', 'aaabbbwwwbaiducom', 'aaa_bbb_www_baidu_com', 'bbbwwwbaiducom', 'bbb.www.baidu.com', 'bbb_www_baidu_com', 'aaa', 'bbb']
+
 ```
 3. 常见备份文件名，字典于代码中可自行切换,:
 ```
@@ -65,7 +78,7 @@ tmp_info_dic = ['1','127.0.0.1','2010','2011','2012','2013','2014','2015','2016'
 ```
 4. 自动记录扫描成功的备份地址到以时间命名的文件
 ```
-例如 20180616_16-28-14.txt
+例如 result.txt
 
 https://www.baidu.com/baidu.tar.gz  size:1k
 https://www.baidu.comn/www.baidu.com.zip  size:10M
@@ -74,15 +87,16 @@ https://www.baidu.comn/www.baidu.com.zip  size:10M
 ## 2. 使用方式
 ```
 参数：
-    -h --help      查看工具使用帮助
-    -f --url-file  批量时指定存放url的文件,每行url需要指定http://或者https://，否则默认使用http://
-    -t --thread    指定线程数，建议100
-    -u --url       单个url扫描时指定url
-    -d --dict-file 自定义扫描字典
+    -h --help           查看工具使用帮助
+    -f --url-file       批量时指定存放url的文件,每行url需要指定http://或者https://，否则默认使用http://
+    -t --thread         指定线程数，建议100
+    -u --url            单个url扫描时指定url
+    -d --dict-file      自定义扫描字典
+    -o --output-file    结果写入的文件名
 使用:
-    批量url扫描    python3 ihoneyBakFileScan_Modify.py -t 100 -f url.txt
-    单个url扫描    python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com/
-                  python3 ihoneyBakFileScan_Modify.py -u www.baidu.com
-                  python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -d dict.txt
+    批量url扫描    python3 ihoneyBakFileScan_Modify.py -t 100 -f url.txt -o result.txt
+    单个url扫描    python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com/ -o result.txt
+                  python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -o result.txt
+                  python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -d dict.txt -o result.txt
 ```
 
