@@ -36,15 +36,8 @@ python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
 ```
 ##### 1.2 依赖环境
 ```
-开发环境：
 python3
 ```
-```
-安装第三方依赖库：
-pip3 install requests
-pip3 install hurry-filesize
-```
-
 ##### 1.3 工具核心：
 
 1. 常见后缀：
