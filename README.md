@@ -1,5 +1,10 @@
 # ihoneyBakFileScan_Modify 批量网站备份文件泄露扫描工具
 
+# 2022.6.22 添加、修改内容
+
+增加域名扫描规则
+修复多线程扫描死锁的bug，修改为线程池
+
 # 2022.2.8 添加、修改内容
 
 增加备份文件fuzz规则
@@ -16,11 +21,6 @@
 python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt
 ```
 
-
-[![python3](https://img.shields.io/badge/python-3.5.3-brightgreen.svg?style=plastic)](https://www.python.org/)
-[![requests](https://img.shields.io/badge/requests-2.19.1-brightgreen.svg?longCache=true&style=plastic)](http://www.python-requests.org/)
-[![pip3.5](https://img.shields.io/badge/pip3.5-10.0.1-brightgreen.svg?longCache=true&style=plastic)](https://pypi.org/project/pip/)
-
 ## 1. 简介
 
 ##### 1.1 网站备份文件泄露可能造成的危害：
@@ -34,82 +34,40 @@ python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt
 ##### 1.2 依赖环境
 ```
 开发环境：
-python3   python3.5.3
-pip3.5    pip 10.0.1
-requests  2.19.1
+python3
 ```
 ```
 安装第三方依赖库：
-pip3.5 install requests
+pip3 install requests
 pip3 install hurry-filesize
 ```
 
 ##### 1.3 工具核心：
-```
+
 1. 常见后缀：
-   * '.rar', '.zip', '.gz', '.sql.gz', '.tar.gz' ...
-2. 文件头识别:
-   * rar:526172211a0700cf9073
-   * zip:504b0304140000000800
-   * gz：1f8b080000000000000b，也包括'.sql.gz'，取'1f8b0800' 作为keyword
-   * tar.gz: 1f8b0800
-   * sql：每种导出方式有不同的文件头
-       * Adminer：  
-       * mysqldump：     
-       * phpMyAdmin：
-       * navicat：   
-3. 数据库备份导出方式识别：
-   * 导出方式                      文件头字符:                    前10个16进制字符：
-   * mysqldump:                   -- MySQL dump:               2d2d204d7953514c
-   * phpMyAdmin:                  -- phpMyAdmin SQL Dump:      2d2d207068704d794164
-   * navicat:                     /* Navicat :                 2f2a0a204e617669636174
-   * Adminer:                     -- Adminer x.x.x MySQL dump: 2d2d2041646d696e6572  (5月9日新增xxx.sql)
-   * Navicat MySQL Data Transfer: /* Navicat:                  2f2a0a4e617669636174
-   * 一种未知导出方式:               -- -------:                  2d2d202d2d2d2d2d2d2d
-4. 根据域名自动生成相关扫描字典:
-    ➜  ihoneyBakFileScan python3.5 ihoneyBakFileScan.py -u https://www.ihoney.net.cn
-    [ ] https://www.ihoney.net.cn/__zep__/js.zip
-    [ ] https://www.ihoney.net.cn/faisunzip.zip
-    [ ] https://www.ihoney.net.cn/www.ihoney.net.cn.rar
-    [ ] https://www.ihoney.net.cn/wwwihoneynetcn.rar
-    [ ] https://www.ihoney.net.cn/ihoneynetcn.rar
-    [ ] https://www.ihoney.net.cn/ihoney.net.cn.rar
-    [ ] https://www.ihoney.net.cn/www.rar
-    [ ] https://www.ihoney.net.cn/ihoney.rar
-    [*] https://www.ihoney.net.cn/www.ihoney.net.cn.zip  size:0M
-    [ ] https://www.ihoney.net.cn/wwwihoneynetcn.zip
-    [ ] https://www.ihoney.net.cn/ihoneynetcn.zip
-    [ ] https://www.ihoney.net.cn/ihoney.net.cn.zip
-    [ ] https://www.ihoney.net.cn/www.zip
-    [ ] https://www.ihoney.net.cn/ihoney.zip
-    [ ] https://www.ihoney.net.cn/www.ihoney.net.cn.gz
-    [ ] https://www.ihoney.net.cn/wwwihoneynetcn.gz
-    [ ] https://www.ihoney.net.cn/ihoneynetcn.gz
-    [ ] https://www.ihoney.net.cn/ihoney.net.cn.gz
-    [ ] https://www.ihoney.net.cn/www.gz
-    [ ] https://www.ihoney.net.cn/ihoney.gz
-    [ ] https://www.ihoney.net.cn/www.ihoney.net.cn.sql.gz
-    [ ] https://www.ihoney.net.cn/wwwihoneynetcn.sql.gz
-    [ ] https://www.ihoney.net.cn/ihoneynetcn.sql.gz
-    [ ] https://www.ihoney.net.cn/ihoney.net.cn.sql.gz
-    [ ] https://www.ihoney.net.cn/www.sql.gz
-    [ ] https://www.ihoney.net.cn/ihoney.sql.gz
-    [ ] https://www.ihoney.net.cn/www.ihoney.net.cn.tar.gz
-    [ ] https://www.ihoney.net.cn/wwwihoneynetcn.tar.gz
-    [ ] https://www.ihoney.net.cn/ihoneynetcn.tar.gz
-    [ ] https://www.ihoney.net.cn/ihoney.net.cn.tar.gz
-    [ ] https://www.ihoney.net.cn/www.tar.gz
-    [ ] https://www.ihoney.net.cn/ihoney.tar.gz
-    [ ] https://www.ihoney.net.cn/www.ihoney.net.cn.sql
-    [ ] https://www.ihoney.net.cn/wwwihoneynetcn.sql
-    [ ] https://www.ihoney.net.cn/ihoneynetcn.sql
-    [ ] https://www.ihoney.net.cn/ihoney.net.cn.sql
-    [ ] https://www.ihoney.net.cn/www.sql
-    [ ] https://www.ihoney.net.cn/ihoney.sql
-5. 自动记录扫描成功的备份地址到以时间命名的文件
-    例如 20180616_16-28-14.txt：
-    https://www.ihoney.net.cn/ihoney.tar.gz  size:0M
-    https://www.ihoney.net.cn/www.ihoney.net.cn.zip  size:0M
+```
+['.zip','.rar','.tar.gz','.tgz','.tar.bz2','.tar','.jar','.war','.7z','.bak','.sql','.gz','.sql.gz','.tar.tgz']
+```
+2. 根据域名自动生成相关扫描字典:
+```
+python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com
+
+['www.baidu.com', 'wwwbaiducom', 'www_baidu_com', 'baiducom', 'baidu.com', 'baidu_com', 'www', 'baidu']
+```
+3. 常见备份文件名，字典于代码中可自行切换,:
+```
+#77
+tmp_info_dic = ['1','127.0.0.1','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','__zep__/js','admin','archive','asp','aspx','auth','back','backup','backups','bak','bbs','bin','clients','code','com','customers','dat','data','database','db','dump','engine','error_log','faisunzip','files','forum','home','html','index','joomla','js','jsp','local','localhost','master','media','members','my','mysql','new','old','orders','php','sales','site','sql','store','tar','test','user','users','vb','web','website','wordpress','wp','www','wwwroot','root']
+
+#130
+#tmp_info_dic = ['__zep__/js','0','00','000','012','1','111','123','127.0.0.1','2','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','234','3','333','4','444','5','555','6','666','7','777','8','888','9','999','a','about','admin','app','application','archive','asp','aspx','auth','b','back','backup','backups','bak','bbs','beifen','bin','cache','clients','code','com','config','core','customers','dat','data','database','db','download','dump','engine','error_log','extend','files','forum','ftp','home','html','img','include','index','install','joomla','js','jsp','local','login','localhost','master','media','members','my','mysql','new','old','orders','output','package','php','public','root','runtime','sales','server','shujuku','site','sjk','sql','store','tar','template','test','upload','user','users','vb','vendor','wangzhan','web','website','wordpress','wp','www','wwwroot','wz','数据库','数据库备份','网站','网站备份']
+```
+4. 自动记录扫描成功的备份地址到以时间命名的文件
+```
+例如 20180616_16-28-14.txt
+
+https://www.baidu.com/baidu.tar.gz  size:1k
+https://www.baidu.comn/www.baidu.com.zip  size:10M
 ```
 
 ## 2. 使用方式
@@ -121,30 +79,9 @@ pip3 install hurry-filesize
     -u --url       单个url扫描时指定url
     -d --dict-file 自定义扫描字典
 使用:
-    批量url扫描    python3.5 ihoneyBakFileScan.py -t 100 -f url.txt
-    单个url扫描    python3.5 ihoneyBakFileScan.py -u https://www.ihoneysec.top/
-                  python3.5 ihoneyBakFileScan.py -u www.ihoney.net.cn
-                  python3.5 ihoneyBakFileScan.py -u www.ihoney.net.cn -d dict.txt
+    批量url扫描    python3 ihoneyBakFileScan_Modify.py -t 100 -f url.txt
+    单个url扫描    python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com/
+                  python3 ihoneyBakFileScan_Modify.py -u www.baidu.com
+                  python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -d dict.txt
 ```
-
-## 3. ChangeLog:
-```
-[2018.04.20]  首发T00ls：支持rar,zip后缀备份文件头识别，根据域名自动生成相关扫描字典，自动记录扫描成功的备份地址到文件
-[2018.04.26]
-              在原本扫描成功的备份地址后增加了备份大小，以方便快速识别有效备份。
-              增加了.sql文件识别，也是识别文件头的方式，文件头我目前检测到三种，分别是不同方式导出的：1.mysql，2.phpmyadmin，3.navicat。
-[2018.05.19]  新增识别Adminer导出的两种格式：baidu.sql、baodu.sql.gz
-[2018.05.31]  新增Navicat MySQL Data Transfer备份导出方式和另一种未知导出方式
-[2018.06.16]  修复支持https站扫描，并从旧项目中抽出来独立作为一个项目
-[2018.06.18]  从多线程加队列改为多进程加进程池，提升扫描速度
-```
-
-## 4. 联系
-```
-* 在使用工具的过程中遇到任何异常、问题，或者你有更好的建议都可以联系作者，一起将这款不出名的小工具完善下去。
-* 联系方式： QQ 102505481
-```
-
-##### 2018年06月18日22:51:11
-
 
