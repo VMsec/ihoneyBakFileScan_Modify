@@ -15,7 +15,7 @@
 
 增加备份文件fuzz规则
 
-修改备份文件大小判断方式（pip3 install hurry-filesize）
+修改备份文件大小判断方式（pip3 install hurry.filesize）
 
 修改备份文件是否存在的判断规则
 
