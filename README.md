@@ -6,7 +6,10 @@
 
 增加域名扫描规则
 
+增加扫描随机User-Agent（pip3 install fake_headers）
+
 修复多线程扫描死锁的bug，改为线程池
+
 
 # 2022.2.8 添加、修改内容
 
