@@ -6,6 +6,7 @@ from argparse import ArgumentParser
 from copy import deepcopy
 from datetime import datetime
 from hurry.filesize import size
+from fake_headers import Headers
 from concurrent.futures import ThreadPoolExecutor
 
 requests.packages.urllib3.disable_warnings()
@@ -14,7 +15,7 @@ logging.basicConfig(level=logging.WARNING, format="%(message)s")
 
 def vlun(urltarget):
     try:
-        r = requests.get(url=urltarget, headers=headers, timeout=timeout, allow_redirects=False, stream=True, verify=False)
+        r = requests.get(url=urltarget, headers=header.generate(), timeout=timeout, allow_redirects=False, stream=True, verify=False)
         if (r.status_code == 200)&('html' not in r.headers.get('Content-Type'))&('xml' not in r.headers.get('Content-Type'))&('json' not in r.headers.get('Content-Type'))&('javascript' not in r.headers.get('Content-Type')):
             tmp_rarsize = int(r.headers.get('Content-Length'))
             rarsize = str(size(tmp_rarsize))                
@@ -135,7 +136,11 @@ if __name__ == '__main__':
     global outputfile
     outputfile = args.output_file
 
-    headers = {'User-Agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36", }
+    header = Headers(
+        # generate any browser & os headeers
+        headers=False  # don`t generate misc headers
+    )
+    
     timeout = 10
 
     try:
