@@ -65,7 +65,7 @@ def dispatcher(url_file=None, url=None, max_thread=1, dic=None):
     else:
         pass
 
-    with open(outputfile, 'w'):
+    with open(outputfile, 'a'):
         pass
 
     for u in urllist:
