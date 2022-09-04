@@ -134,7 +134,10 @@ if __name__ == '__main__':
             info_dic.extend([a + b])
     
     global outputfile
-    outputfile = args.output_file
+    if (args.output_file):
+        outputfile = args.output_file
+    else:
+        outputfile = 'result.txt'
 
     header = Headers(
         # generate any browser & os headeers
@@ -149,11 +152,11 @@ if __name__ == '__main__':
             # This mode is not recommended for bulk scans. It is prone to false positives and can reduce program efficiency.
             custom_dict = list(set([i.replace("\n", "") for i in open(str(args.dict_file), "r").readlines()]))
             info_dic.extend(custom_dict)
-        if args.url and outputfile:
+        if args.url:
             dispatcher(url=args.url, max_thread=args.max_threads, dic=info_dic)
-        elif args.url_file and outputfile:
+        elif args.url_file:
             dispatcher(url_file=args.url_file, max_thread=args.max_threads, dic=info_dic)
         else:
-            print("[!] Please specify a URL, or URL file name, or RESULT file name.")
+            print("[!] Please specify a URL or URL file name")
     except Exception as e:
         print(e)
