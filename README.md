@@ -21,7 +21,15 @@
 
 修改为多线程扫描，内存占用更小
 
-经测试 1h1g vps 500线程可以拉满
+从文件读取的url建议为以下格式
+
+```
+https://www.baidu.com
+http://www.baidu.com
+https://www.baidu.com:8443
+```
+
+经测试 1h1g vps 500线程可以拉满(大量url建议切分后扫描或写脚本逐个扫描)
 
 ```
 python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
