@@ -48,9 +48,8 @@ def urlcheck(target=None, ulist=None):
                 ulist.append(line + '/')
         return ulist
 
-def dispatcher(url_file=None, url=None, max_thread=1, dic=None):
+def dispatcher(url_file=None, url=None, max_thread=20, dic=None):
     urllist = []
-    check_urllist = []
     if url_file is not None and url is None:
         with open(str(url_file)) as f:
             while True:
@@ -69,6 +68,7 @@ def dispatcher(url_file=None, url=None, max_thread=1, dic=None):
         pass
 
     for u in urllist:
+        check_urllist = []
         cport = None
         # ucp = u.strip('https://').strip('http://')
         if u.startswith('http://'):
@@ -101,12 +101,12 @@ def dispatcher(url_file=None, url=None, max_thread=1, dic=None):
             check_urllist.append(url)
             print("[add check] "+url)
 
-    l=[]
-    p = ThreadPoolExecutor(max_thread)
-    for url in check_urllist:
-        obj = p.submit(vlun, url)
-        l.append(obj)
-    p.shutdown()
+        l=[]
+        p = ThreadPoolExecutor(max_thread)
+        for url in check_urllist:
+            obj = p.submit(vlun, url)
+            l.append(obj)
+        p.shutdown()
 
 
 if __name__ == '__main__':
