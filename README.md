@@ -1,5 +1,9 @@
 # ihoneyBakFileScan_Modify 批量网站备份文件泄露扫描工具
 
+# 2022.9.15
+
+更改扫描逻辑，修复待扫描列表过长导致的内存占用过大
+
 # 2022.6.22 添加、修改内容
 
 增加结果写入指定文件名
@@ -29,7 +33,7 @@ http://www.baidu.com
 https://www.baidu.com:8443
 ```
 
-经测试 1h1g vps 500线程可以拉满(大量url建议切分后扫描或写脚本逐个扫描)
+经测试 1h1g vps 500线程可以拉满
 
 ```
 python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
