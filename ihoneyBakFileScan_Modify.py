@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.WARNING, format="%(message)s")
 def vlun(urltarget):
     try:
         r = requests.get(url=urltarget, headers=header.generate(), timeout=timeout, allow_redirects=False, stream=True, verify=False)
-        if (r.status_code == 200)&('html' not in r.headers.get('Content-Type'))&('xml' not in r.headers.get('Content-Type'))&('text' not in r.headers.get('Content-Type'))&('json' not in r.headers.get('Content-Type'))&('javascript' not in r.headers.get('Content-Type')):
+        if (r.status_code == 200)&('html' not in r.headers.get('Content-Type'))&('image' not in r.headers.get('Content-Type'))&('xml' not in r.headers.get('Content-Type'))&('text' not in r.headers.get('Content-Type'))&('json' not in r.headers.get('Content-Type'))&('javascript' not in r.headers.get('Content-Type')):
             tmp_rarsize = int(r.headers.get('Content-Length'))
             rarsize = str(size(tmp_rarsize))                
             if (int(rarsize[0:-1])>0):
