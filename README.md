@@ -57,7 +57,7 @@ python3
 
 1. 常见后缀：
 ```
-['.zip','.rar','.tar.gz','.tgz','.tar.bz2','.tar','.jar','.war','.7z','.bak','.sql','.gz','.sql.gz','.tar.tgz']
+['.zip','.rar','.tar.gz','.tgz','.tar.bz2','.tar','.jar','.war','.7z','.bak','.sql','.gz','.sql.gz','.tar.tgz','.backup']
 ```
 2. 根据域名自动生成相关扫描字典:
 ```
