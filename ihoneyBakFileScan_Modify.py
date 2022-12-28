@@ -89,7 +89,7 @@ def dispatcher(url_file=None, url=None, max_thread=20, dic=None):
             wwwhost += www1[i]
 
         current_info_dic = deepcopy(dic)  # deep copy
-        suffixFormat = ['.zip','.rar','.tar.gz','.tgz','.tar.bz2','.tar','.jar','.war','.7z','.bak','.sql','.gz','.sql.gz','.tar.tgz']
+        suffixFormat = ['.zip','.rar','.tar.gz','.tgz','.tar.bz2','.tar','.jar','.war','.7z','.bak','.sql','.gz','.sql.gz','.tar.tgz','.backup']
         domainDic = [ucp, ucp.replace('.', ''), ucp.replace('.', '_'), wwwhost, ucp.split('.', 1)[-1], (ucp.split('.', 1)[1]).replace('.', '_'), www1[0], www1[1]]
 
         for s in suffixFormat:
