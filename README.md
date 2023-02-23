@@ -1,4 +1,21 @@
-# ihoneyBakFileScan_Modify 批量网站备份文件泄露扫描工具
+# ihoneyBakFileScan_Modify 
+
+一款多线程批量网站备份文件泄露扫描工具
+
+## 快速使用
+从文件读取的url建议为以下格式
+
+```
+https://www.baidu.com
+http://www.baidu.com
+https://www.baidu.com:8443
+```
+
+经测试 1h1g vps 500线程可以拉满
+
+```
+python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
+```
 
 ## 1. 简介
 
@@ -96,16 +113,3 @@ https://www.baidu.comn/www.baidu.com.zip  size:10M
 
 修改为多线程扫描，内存占用更小
 
-从文件读取的url建议为以下格式
-
-```
-https://www.baidu.com
-http://www.baidu.com
-https://www.baidu.com:8443
-```
-
-经测试 1h1g vps 500线程可以拉满
-
-```
-python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
-```
