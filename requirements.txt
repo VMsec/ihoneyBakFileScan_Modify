@@ -1,0 +1,4 @@
+fake_headers==1.0.2
+hurry==1.1
+hurry.filesize==0.9
+requests==2.25.1
