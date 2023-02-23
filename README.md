@@ -1,44 +1,5 @@
 # ihoneyBakFileScan_Modify 批量网站备份文件泄露扫描工具
 
-# 2022.9.15 添加、修改内容
-
-更改扫描逻辑，修复待扫描列表过长导致的内存占用过大
-
-# 2022.6.22 添加、修改内容
-
-增加结果写入指定文件名
-
-增加域名扫描规则
-
-增加扫描随机User-Agent（pip3 install fake_headers）
-
-修复多线程扫描死锁的bug，改为线程池
-
-
-# 2022.2.8 添加、修改内容
-
-增加备份文件fuzz规则
-
-修改备份文件大小判断方式（pip3 install hurry.filesize）
-
-修改备份文件是否存在的判断规则
-
-修改为多线程扫描，内存占用更小
-
-从文件读取的url建议为以下格式
-
-```
-https://www.baidu.com
-http://www.baidu.com
-https://www.baidu.com:8443
-```
-
-经测试 1h1g vps 500线程可以拉满
-
-```
-python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
-```
-
 ## 1. 简介
 
 ##### 1.1 网站备份文件泄露可能造成的危害：
@@ -51,7 +12,12 @@ python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
 ```
 ##### 1.2 依赖环境
 ```
-python3
+python3 -m pip install -r requirements.txt
+
+fake_headers==1.0.2
+hurry==1.1
+hurry.filesize==0.9
+requests==2.25.1
 ```
 ##### 1.3 工具核心：
 
@@ -105,3 +71,41 @@ https://www.baidu.comn/www.baidu.com.zip  size:10M
                   python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -d dict.txt -o result.txt
 ```
 
+# 2022.9.15 添加、修改内容
+
+更改扫描逻辑，修复待扫描列表过长导致的内存占用过大
+
+# 2022.6.22 添加、修改内容
+
+增加结果写入指定文件名
+
+增加域名扫描规则
+
+增加扫描随机User-Agent（pip3 install fake_headers）
+
+修复多线程扫描死锁的bug，改为线程池
+
+
+# 2022.2.8 添加、修改内容
+
+增加备份文件fuzz规则
+
+修改备份文件大小判断方式（pip3 install hurry.filesize）
+
+修改备份文件是否存在的判断规则
+
+修改为多线程扫描，内存占用更小
+
+从文件读取的url建议为以下格式
+
+```
+https://www.baidu.com
+http://www.baidu.com
+https://www.baidu.com:8443
+```
+
+经测试 1h1g vps 500线程可以拉满
+
+```
+python3 ihoneyBakFileScan_Modify.py -t 500 -f url.txt -o result.txt
+```
