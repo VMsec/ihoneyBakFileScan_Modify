@@ -81,12 +81,16 @@ https://www.baidu.comn/www.baidu.com.zip  size:10M
     -u --url            单个url扫描时指定url
     -d --dict-file      自定义扫描字典
     -o --output-file    结果写入的文件名
+    -p --proxy          代理服务，例：socks5://127.0.0.1:1080
 使用:
     批量url扫描    python3 ihoneyBakFileScan_Modify.py -t 100 -f url.txt -o result.txt
     单个url扫描    python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com/ -o result.txt
                   python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -o result.txt
                   python3 ihoneyBakFileScan_Modify.py -u www.baidu.com -d dict.txt -o result.txt
 ```
+# 2023.4.19 添加、修改内容
+
+添加代理功能
 
 # 2022.9.15 添加、修改内容
 
