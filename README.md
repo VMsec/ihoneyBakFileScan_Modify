@@ -34,7 +34,7 @@ python3 -m pip install -r requirements.txt
 fake_headers==1.0.2
 hurry==1.1
 hurry.filesize==0.9
-requests==2.25.1
+requests==2.31.0
 ```
 ##### 1.3 工具核心：
 
