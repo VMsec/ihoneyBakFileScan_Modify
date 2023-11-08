@@ -102,11 +102,11 @@ def dispatcher(url_file=None, url=None, max_thread=20, dic=None):
                         '.gz', '.sql.gz', '.tar.tgz', '.backup']
         domainDic = [ucp, ucp.replace('.', ''), ucp.replace('.', '_'), wwwhost, ucp.split('.', 1)[-1],
                      (ucp.split('.', 1)[1]).replace('.', '_'), www1[0], www1[1]]
-
+        domainDic = list(set(domainDic))
         for s in suffixFormat:
             for d in domainDic:
                 current_info_dic.extend([d + s])
-
+        current_info_dic = list(set(current_info_dic))
         for info in current_info_dic:
             url = str(u) + str(info)
             check_urllist.append(url)
