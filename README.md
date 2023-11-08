@@ -45,7 +45,7 @@ requests==2.31.0
 2. 根据域名自动生成相关扫描字典:
 ```
 python3 ihoneyBakFileScan_Modify.py -u https://baidu.com -t 1000 -o test.txt
-['baidu.com', 'baiducom', 'baidu_com', 'com', 'com', 'com', 'baidu', 'com']
+['baidu.com', 'baiducom', 'baidu_com', 'baidu', 'com']
 
 python3 ihoneyBakFileScan_Modify.py -u https://www.baidu.com -t 1000 -o test.txt
 ['www.baidu.com', 'wwwbaiducom', 'www_baidu_com', 'baiducom', 'baidu.com', 'baidu_com', 'www', 'baidu']
