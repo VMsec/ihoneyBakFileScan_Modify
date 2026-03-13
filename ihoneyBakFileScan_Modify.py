@@ -43,7 +43,9 @@ def check_url(url: str, session: requests.Session, timeout: int, proxies: Option
             verify=False,
             proxies=proxies
         )
-        resp.raise_for_status()
+        
+        # Removed raise_for_status() because it interrupts the flow on 404/500
+        # which prevents the strict logic from running correctly.
 
         if not is_likely_backup_response(resp):
             return
@@ -55,11 +57,9 @@ def check_url(url: str, session: requests.Session, timeout: int, proxies: Option
         size_str = naturalsize(int(cl), binary=True)
         logging.warning(f"[ success ] {url}  size: {size_str}")
 
-        output_path.write_text(
-            f"{url} size:{size_str}\n",
-            encoding='utf-8',
-            mode='a'
-        )
+        # Fix: Using 'with open' for thread-safe appending instead of Path.write_text
+        with open(output_path, 'a', encoding='utf-8') as f:
+            f.write(f"{url} size:{size_str}\n")
 
     except requests.RequestException:
         pass
@@ -81,14 +81,13 @@ def generate_candidates(base_url: str, prefixes: List[str], suffixes: List[str])
         variants.add('_'.join(parts))          # 192_168_2_111
     else:
         # 正常域名逻辑
-        if len(parts) < 2:
-            return []
-        variants.add(domain)
-        variants.add(''.join(parts))
-        variants.add('_'.join(parts))
-        variants.add('.'.join(parts[1:]))
-        variants.add(parts[0])
-        variants.add('_'.join(parts[1:]))
+        if len(parts) >= 1:
+            variants.add(domain)
+            variants.add(parts[0])
+            variants.add(''.join(parts))
+            if len(parts) > 1:
+                variants.add('.'.join(parts[1:]))
+                variants.add('_'.join(parts[1:]))
 
         if len(parts) > 2:
             without_tld = '.'.join(parts[:-1])
@@ -96,12 +95,16 @@ def generate_candidates(base_url: str, prefixes: List[str], suffixes: List[str])
             variants.add(''.join(parts[:-1]))
             variants.add('_'.join(parts[:-1]))
 
-    variants = {v for v in variants if v and len(v) > 1}
+    # Merge variants with the dictionary prefixes (like 'back', 'www')
+    final_prefixes = variants.union(set(prefixes))
+    final_prefixes = {v for v in final_prefixes if v and len(str(v)) > 0}
 
     candidates = []
-    for prefix in variants:
+    base_path = base_url.rstrip('/') + '/'
+    for p in final_prefixes:
         for suffix in suffixes:
-            candidates.append(urljoin(base_url.rstrip('/') + '/', prefix + suffix))
+            filename = f"{p}{suffix}" if suffix.startswith('.') else f"{p}.{suffix}"
+            candidates.append(urljoin(base_path, filename))
 
     return sorted(set(candidates))
 
@@ -197,14 +200,15 @@ if __name__ == '__main__':
     )
     parser.add_argument('-f', '--url-file', dest="url_file", help="Example: url.txt")
     parser.add_argument('-t', '--thread', dest="max_threads", nargs='?', type=int, default=20, help="Max threads")
-    parser.add_argument('-u', '--url', dest='url', nargs='?', type=str, help="Example: http://www.example.com/ 或 http://192.168.1.1")
+    parser.add_argument('-u', '--url', dest='url', nargs='?', type=str, help="Example: http://www.example.com/ or http://192.168.1.1")
     parser.add_argument('-d', '--dict-file', dest='dict_file', nargs='?', help="Example: dict.txt")
     parser.add_argument('-o', '--output-file', dest="output_file", help="Example: result.txt")
-    parser.add_argument('-p', '--proxy', dest="proxy", help="Example: socks5://127.0.0.1:1080 或 socks5h://user:pass@host:port")
+    parser.add_argument('-p', '--proxy', dest="proxy", help="Example: socks5://127.0.0.1:1080 or socks5://user:pass@host:port")
 
     args = parser.parse_args()
 
     output_path = Path(args.output_file) if args.output_file else Path('result.txt')
+    # Ensure file exists
     output_path.touch(exist_ok=True)
 
     proxies = None
@@ -232,6 +236,7 @@ if __name__ == '__main__':
         try:
             with open(args.dict_file, encoding='utf-8') as f:
                 custom = [line.strip() for line in f if line.strip()]
+            # This handles custom entry logic as per your original code
             INFO_DIC.extend(custom)
             INFO_DIC = list(set(INFO_DIC))
             logging.info(f"Appended {len(custom)} custom entries")
@@ -240,9 +245,9 @@ if __name__ == '__main__':
 
     timeout = 12
 
-    logging.info(f"Starting scan | Targets: {len(targets)} | Threads: {args.max_threads} | Output: {args.output_file or 'result.txt'}")
+    logging.info(f"Starting scan | Targets: {len(targets)} | Threads: {args.max_threads} | Output: {output_path}")
     if proxies:
         logging.info(f"Using proxy: {proxies.get('http', 'None')}")
 
-    scan_targets(targets, args.max_threads, timeout, proxies, output_path)
+    scan_targets(targets, args.max_workers if hasattr(args, 'max_workers') else args.max_threads, timeout, proxies, output_path)
     logging.info("Scan completed")
