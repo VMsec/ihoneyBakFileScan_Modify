@@ -1,4 +1,12 @@
-fake_headers==1.0.2
-hurry==1.1
-hurry.filesize==0.9
-requests==2.31.0
+# requirements.txt for ihoneyBakFileScan_Modify.py
+# 核心 HTTP 请求库（包含 socks5 支持）
+requests[socks]>=2.32.0
+
+# 随机 User-Agent 生成
+fake-useragent>=2.0.0
+
+# 文件大小人性化显示（MiB、GiB 等）
+humanize>=4.9.0
+
+# 扫描进度条显示
+tqdm>=4.66.0
