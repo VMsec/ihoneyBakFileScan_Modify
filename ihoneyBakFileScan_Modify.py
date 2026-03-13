@@ -32,6 +32,22 @@ def is_likely_backup_response(resp: requests.Response) -> bool:
     )
 
 
+def is_site_accessible(url: str, session: requests.Session, timeout: int, proxies: Optional[Dict]) -> bool:
+    """Check if the target is accessible before starting the scan"""
+    try:
+        resp = session.get(
+            url,
+            headers={'User-Agent': ua.random},
+            timeout=timeout,
+            verify=False,
+            allow_redirects=True,
+            proxies=proxies
+        )
+        return True
+    except Exception:
+        return False
+
+
 def check_url(url: str, session: requests.Session, timeout: int, proxies: Optional[Dict], output_path: Path) -> None:
     try:
         resp = session.get(
@@ -122,6 +138,12 @@ def scan_targets(targets: List[str], max_workers: int, timeout: int, proxies: Op
     total_scanned = 0
 
     for idx, base_url in enumerate(targets, 1):
+        # --- Added Site Accessibility Check ---
+        logging.info(f"[{idx}/{len(targets)}] Checking connectivity for {base_url}...")
+        if not is_site_accessible(base_url, session, timeout, proxies):
+            logging.error(f"[{idx}/{len(targets)}] {base_url} is unreachable. Skipping...")
+            continue
+
         candidates = generate_candidates(base_url, TMP_INFO_DIC, SUFFIX_FORMAT)
         site_count = len(candidates)
         total_candidates += site_count
@@ -179,7 +201,11 @@ tmp_info_dic = [
 # 130 items (commented out)
 # tmp_info_dic = ['0','00','000','012','1','111','123','127.0.0.1','2','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026','234','3','333','4','444','5','555','6','666','7','777','8','888','9','999','a','about','admin','app','application','archive','asp','aspx','auth','b','back','backup','backups','bak','bbs','beifen','bin','cache','clients','code','com','config','core','customers','dat','data','database','db','download','dump','engine','error_log','extend','files','forum','ftp','home','html','img','include','index','install','joomla','js','jsp','local','login','localhost','master','media','members','my','mysql','new','old','orders','output','package','php','public','root','runtime','sales','server','shujuku','site','sjk','sql','store','tar','template','test','upload','user','users','vb','vendor','wangzhan','web','website','wordpress','wp','www','wwwroot','wz','log','数据库','数据库备份','网站','网站备份']
 
+
 TMP_INFO_DIC = tmp_info_dic
+
+
+
 
 INFO_DIC = list(set(prefix + suffix for prefix in TMP_INFO_DIC for suffix in SUFFIX_FORMAT))
 
@@ -243,7 +269,8 @@ if __name__ == '__main__':
         except Exception as e:
             logging.warning(f"Failed to load custom dict: {e}")
 
-    timeout = 12
+    # Set timeout to 5 seconds
+    timeout = 5
 
     logging.info(f"Starting scan | Targets: {len(targets)} | Threads: {args.max_threads} | Output: {output_path}")
     if proxies:
