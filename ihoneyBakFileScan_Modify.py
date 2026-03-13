@@ -104,28 +104,39 @@ def scan_targets(targets: List[str], max_workers: int, timeout: int, proxies: Op
     session.verify = False
 
     total_candidates = 0
-    tasks = []
+    total_scanned = 0
 
-    for base_url in targets:
+    for idx, base_url in enumerate(targets, 1):
         candidates = generate_candidates(base_url, TMP_INFO_DIC, SUFFIX_FORMAT)
-        total_candidates += len(candidates)
-        logging.info(f"[{base_url}] Generated {len(candidates)} candidates")
+        site_count = len(candidates)
+        total_candidates += site_count
 
-        for url in candidates:
-            tasks.append((url, session, timeout, proxies, output_path))
+        logging.info(f"[{idx}/{len(targets)}] {base_url} - Generated {site_count} candidates")
 
-    logging.info(f"Starting scan | Total candidates: {total_candidates}")
+        if site_count == 0:
+            continue
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(check_url, *task) for task in tasks]
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
 
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Scanning", unit="req"):
-            try:
-                future.result()
-            except Exception:
-                pass
+            for url in candidates:
+                futures.append(
+                    executor.submit(check_url, url, session, timeout, proxies, output_path)
+                )
 
-    logging.info("Scan completed")
+            # 当前站点进度条（不留尾巴，避免刷屏）
+            with tqdm(total=site_count, desc=f"Scanning {base_url}", unit="req", leave=False) as pbar:
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception:
+                        pass
+                    pbar.update(1)
+                    total_scanned += 1
+
+        logging.info(f"[{idx}/{len(targets)}] {base_url} - Finished {site_count} candidates")
+
+    logging.info(f"Scan completed | Total candidates: {total_candidates} | Scanned: {total_scanned}")
 
 
 # ────────────────────────────────────────────────
@@ -209,7 +220,6 @@ if __name__ == '__main__':
         try:
             with open(args.dict_file, encoding='utf-8') as f:
                 custom = [line.strip() for line in f if line.strip()]
-            #global INFO_DIC
             INFO_DIC.extend(custom)
             INFO_DIC = list(set(INFO_DIC))
             logging.info(f"Appended {len(custom)} custom entries")
