@@ -9,6 +9,7 @@ from humanize import naturalsize
 from tqdm import tqdm
 from pathlib import Path
 from typing import List, Optional, Dict, Set
+from requests.adapters import HTTPAdapter
 
 requests.packages.urllib3.disable_warnings()
 
@@ -71,23 +72,29 @@ def generate_candidates(base_url: str, prefixes: List[str], suffixes: List[str])
     domain = parsed.netloc.lower().rstrip('.')
     parts = domain.split('.')
 
-    if len(parts) < 2:
-        return []
+    variants: Set[str] = set()
 
-    variants: Set[str] = set([
-        domain,
-        ''.join(parts),
-        '_'.join(parts),
-        '.'.join(parts[1:]),
-        parts[0],
-        '_'.join(parts[1:]),
-    ])
+    # 特殊处理纯 IPv4 地址（如 192.168.2.111）
+    if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
+        variants.add(domain)                   # 192.168.2.111
+        variants.add(''.join(parts))           # 1921682111
+        variants.add('_'.join(parts))          # 192_168_2_111
+    else:
+        # 正常域名逻辑
+        if len(parts) < 2:
+            return []
+        variants.add(domain)
+        variants.add(''.join(parts))
+        variants.add('_'.join(parts))
+        variants.add('.'.join(parts[1:]))
+        variants.add(parts[0])
+        variants.add('_'.join(parts[1:]))
 
-    if len(parts) > 2:
-        without_tld = '.'.join(parts[:-1])
-        variants.add(without_tld)
-        variants.add(''.join(parts[:-1]))
-        variants.add('_'.join(parts[:-1]))
+        if len(parts) > 2:
+            without_tld = '.'.join(parts[:-1])
+            variants.add(without_tld)
+            variants.add(''.join(parts[:-1]))
+            variants.add('_'.join(parts[:-1]))
 
     variants = {v for v in variants if v and len(v) > 1}
 
@@ -103,6 +110,11 @@ def scan_targets(targets: List[str], max_workers: int, timeout: int, proxies: Op
     session = requests.Session()
     session.verify = False
 
+    # 增大连接池，避免 discarding connection 警告
+    adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=2)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+
     total_candidates = 0
     total_scanned = 0
 
@@ -114,6 +126,7 @@ def scan_targets(targets: List[str], max_workers: int, timeout: int, proxies: Op
         logging.info(f"[{idx}/{len(targets)}] {base_url} - Generated {site_count} candidates")
 
         if site_count == 0:
+            logging.warning(f"[{idx}/{len(targets)}] {base_url} - No candidates generated (可能为无效域名/IP)")
             continue
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -124,7 +137,6 @@ def scan_targets(targets: List[str], max_workers: int, timeout: int, proxies: Op
                     executor.submit(check_url, url, session, timeout, proxies, output_path)
                 )
 
-            # 当前站点进度条（不留尾巴，避免刷屏）
             with tqdm(total=site_count, desc=f"Scanning {base_url}", unit="req", leave=False) as pbar:
                 for future in as_completed(futures):
                     try:
@@ -185,7 +197,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('-f', '--url-file', dest="url_file", help="Example: url.txt")
     parser.add_argument('-t', '--thread', dest="max_threads", nargs='?', type=int, default=20, help="Max threads")
-    parser.add_argument('-u', '--url', dest='url', nargs='?', type=str, help="Example: http://www.example.com/")
+    parser.add_argument('-u', '--url', dest='url', nargs='?', type=str, help="Example: http://www.example.com/ 或 http://192.168.1.1")
     parser.add_argument('-d', '--dict-file', dest='dict_file', nargs='?', help="Example: dict.txt")
     parser.add_argument('-o', '--output-file', dest="output_file", help="Example: result.txt")
     parser.add_argument('-p', '--proxy', dest="proxy", help="Example: socks5://127.0.0.1:1080 或 socks5h://user:pass@host:port")
