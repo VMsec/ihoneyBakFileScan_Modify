@@ -209,7 +209,7 @@ if __name__ == '__main__':
         try:
             with open(args.dict_file, encoding='utf-8') as f:
                 custom = [line.strip() for line in f if line.strip()]
-            global INFO_DIC
+            #global INFO_DIC
             INFO_DIC.extend(custom)
             INFO_DIC = list(set(INFO_DIC))
             logging.info(f"Appended {len(custom)} custom entries")
