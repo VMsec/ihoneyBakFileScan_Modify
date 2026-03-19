@@ -1,14 +1,15 @@
 # -*- coding: UTF-8 -*-
 import requests
 import logging
+import threading
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urljoin, urlparse
 from fake_useragent import UserAgent
 from humanize import naturalsize
 from tqdm import tqdm
 from pathlib import Path
-from typing import List, Optional, Dict, Set
+from typing import List, Optional, Dict, Set, Tuple
 from requests.adapters import HTTPAdapter
 
 requests.packages.urllib3.disable_warnings()
@@ -20,6 +21,7 @@ logging.basicConfig(
 )
 
 ua = UserAgent()
+OUTPUT_LOCK = threading.Lock()
 
 
 def is_likely_backup_response(resp: requests.Response) -> bool:
@@ -32,10 +34,15 @@ def is_likely_backup_response(resp: requests.Response) -> bool:
     )
 
 
-def is_site_accessible(url: str, session: requests.Session, timeout: int, proxies: Optional[Dict]) -> bool:
-    """Check if the target is accessible before starting the scan"""
+def is_site_accessible(
+    url: str,
+    session: requests.Session,
+    timeout: int,
+    proxies: Optional[Dict]
+) -> Tuple[bool, str]:
+    """Only skip when the target is unreachable at the network layer."""
     try:
-        resp = session.get(
+        session.get(
             url,
             headers={'User-Agent': ua.random},
             timeout=timeout,
@@ -43,14 +50,20 @@ def is_site_accessible(url: str, session: requests.Session, timeout: int, proxie
             allow_redirects=True,
             proxies=proxies
         )
-        return True
-    except Exception:
-        return False
+        return True, "http_response_received"
+    except requests.exceptions.SSLError as exc:
+        return False, f"ssl_error: {exc}"
+    except requests.exceptions.ConnectionError as exc:
+        return False, f"connection_error: {exc}"
+    except requests.exceptions.Timeout as exc:
+        return False, f"timeout: {exc}"
+    except requests.RequestException as exc:
+        return False, f"request_error: {exc}"
 
 
 def check_url(url: str, session: requests.Session, timeout: int, proxies: Optional[Dict], output_path: Path) -> None:
     try:
-        resp = session.get(
+        with session.get(
             url,
             headers={'User-Agent': ua.random},
             timeout=timeout,
@@ -58,24 +71,20 @@ def check_url(url: str, session: requests.Session, timeout: int, proxies: Option
             stream=True,
             verify=False,
             proxies=proxies
-        )
-        
-        # Removed raise_for_status() because it interrupts the flow on 404/500
-        # which prevents the strict logic from running correctly.
+        ) as resp:
+            if not is_likely_backup_response(resp):
+                return
 
-        if not is_likely_backup_response(resp):
-            return
+            cl = resp.headers.get('Content-Length')
+            if not cl or int(cl) <= 0:
+                return
 
-        cl = resp.headers.get('Content-Length')
-        if not cl or int(cl) <= 0:
-            return
+            size_str = naturalsize(int(cl), binary=True)
+            logging.warning(f"[ success ] {url}  size: {size_str}")
 
-        size_str = naturalsize(int(cl), binary=True)
-        logging.warning(f"[ success ] {url}  size: {size_str}")
-
-        # Fix: Using 'with open' for thread-safe appending instead of Path.write_text
-        with open(output_path, 'a', encoding='utf-8') as f:
-            f.write(f"{url} size:{size_str}\n")
+            with OUTPUT_LOCK:
+                with open(output_path, 'a', encoding='utf-8') as f:
+                    f.write(f"{url} size:{size_str}\n")
 
     except requests.RequestException:
         pass
@@ -125,53 +134,52 @@ def generate_candidates(base_url: str, prefixes: List[str], suffixes: List[str])
     return sorted(set(candidates))
 
 
-def scan_targets(targets: List[str], max_workers: int, timeout: int, proxies: Optional[Dict], output_path: Path):
+def scan_targets(
+    targets: List[str],
+    max_workers: int,
+    timeout: int,
+    proxies: Optional[Dict],
+    output_path: Path,
+    prefixes: List[str]
+) -> None:
     session = requests.Session()
     session.verify = False
 
-    # 增大连接池，避免 discarding connection 警告
-    adapter = HTTPAdapter(pool_connections=50, pool_maxsize=50, max_retries=2)
+    pool_size = max(50, max_workers)
+    adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size, max_retries=2)
     session.mount('http://', adapter)
     session.mount('https://', adapter)
 
     total_candidates = 0
     total_scanned = 0
 
-    for idx, base_url in enumerate(targets, 1):
-        # --- Added Site Accessibility Check ---
-        logging.info(f"[{idx}/{len(targets)}] Checking connectivity for {base_url}...")
-        if not is_site_accessible(base_url, session, timeout, proxies):
-            logging.error(f"[{idx}/{len(targets)}] {base_url} is unreachable. Skipping...")
-            continue
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for idx, base_url in enumerate(targets, 1):
+            logging.info(f"[{idx}/{len(targets)}] Checking connectivity for {base_url}...")
+            accessible, reason = is_site_accessible(base_url, session, timeout, proxies)
+            if not accessible:
+                logging.error(f"[{idx}/{len(targets)}] {base_url} is unreachable ({reason}). Skipping...")
+                continue
 
-        candidates = generate_candidates(base_url, TMP_INFO_DIC, SUFFIX_FORMAT)
-        site_count = len(candidates)
-        total_candidates += site_count
+            candidates = generate_candidates(base_url, prefixes, SUFFIX_FORMAT)
+            site_count = len(candidates)
+            total_candidates += site_count
 
-        logging.info(f"[{idx}/{len(targets)}] {base_url} - Generated {site_count} candidates")
+            logging.info(f"[{idx}/{len(targets)}] {base_url} - Generated {site_count} candidates")
 
-        if site_count == 0:
-            logging.warning(f"[{idx}/{len(targets)}] {base_url} - No candidates generated (可能为无效域名/IP)")
-            continue
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = []
-
-            for url in candidates:
-                futures.append(
-                    executor.submit(check_url, url, session, timeout, proxies, output_path)
-                )
+            if site_count == 0:
+                logging.warning(f"[{idx}/{len(targets)}] {base_url} - No candidates generated (可能为无效域名/IP)")
+                continue
 
             with tqdm(total=site_count, desc=f"Scanning {base_url}", unit="req", leave=False) as pbar:
-                for future in as_completed(futures):
-                    try:
-                        future.result()
-                    except Exception:
-                        pass
+                for _ in executor.map(
+                    lambda candidate: check_url(candidate, session, timeout, proxies, output_path),
+                    candidates
+                ):
                     pbar.update(1)
                     total_scanned += 1
 
-        logging.info(f"[{idx}/{len(targets)}] {base_url} - Finished {site_count} candidates")
+            logging.info(f"[{idx}/{len(targets)}] {base_url} - Finished {site_count} candidates")
 
     logging.info(f"Scan completed | Total candidates: {total_candidates} | Scanned: {total_scanned}")
 
@@ -201,9 +209,26 @@ tmp_info_dic = [
 # 130 items (commented out)
 # tmp_info_dic = ['0','00','000','012','1','111','123','127.0.0.1','2','2010','2011','2012','2013','2014','2015','2016','2017','2018','2019','2020','2021','2022','2023','2024','2025','2026','234','3','333','4','444','5','555','6','666','7','777','8','888','9','999','a','about','admin','app','application','archive','asp','aspx','auth','b','back','backup','backups','bak','bbs','beifen','bin','cache','clients','code','com','config','core','customers','dat','data','database','db','download','dump','engine','error_log','extend','files','forum','ftp','home','html','img','include','index','install','joomla','js','jsp','local','login','localhost','master','media','members','my','mysql','new','old','orders','output','package','php','public','root','runtime','sales','server','shujuku','site','sjk','sql','store','tar','template','test','upload','user','users','vb','vendor','wangzhan','web','website','wordpress','wp','www','wwwroot','wz','log','数据库','数据库备份','网站','网站备份']
 
-TMP_INFO_DIC = tmp_info_dic
+TMP_INFO_DIC = list(dict.fromkeys(tmp_info_dic))
 
-INFO_DIC = list(set(prefix + suffix for prefix in TMP_INFO_DIC for suffix in SUFFIX_FORMAT))
+
+def normalize_targets(raw_targets: List[str]) -> List[str]:
+    normalized: List[str] = []
+    seen: Set[str] = set()
+
+    for target in raw_targets:
+        value = target.strip()
+        if not value:
+            continue
+
+        normalized_value = value.rstrip('/') + '/'
+        if normalized_value in seen:
+            continue
+
+        seen.add(normalized_value)
+        normalized.append(normalized_value)
+
+    return normalized
 
 
 # ────────────────────────────────────────────────
@@ -229,6 +254,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    if args.max_threads < 1:
+        parser.error("--thread must be greater than 0")
+
     output_path = Path(args.output_file) if args.output_file else Path('result.txt')
     # Ensure file exists
     output_path.touch(exist_ok=True)
@@ -240,13 +268,13 @@ if __name__ == '__main__':
             'https': args.proxy
         }
 
-    targets = []
+    targets: List[str] = []
     if args.url:
-        targets = [args.url.rstrip('/') + '/']
+        targets = normalize_targets([args.url])
     elif args.url_file:
         try:
             with open(args.url_file, encoding='utf-8') as f:
-                targets = [line.strip().rstrip('/') + '/' for line in f if line.strip()]
+                targets = normalize_targets(f.readlines())
         except Exception as e:
             print(f"[ERROR] Cannot read file {args.url_file}: {e}")
             exit(1)
@@ -254,14 +282,13 @@ if __name__ == '__main__':
         parser.print_help()
         exit(1)
 
+    active_prefixes = list(TMP_INFO_DIC)
     if args.dict_file:
         try:
             with open(args.dict_file, encoding='utf-8') as f:
                 custom = [line.strip() for line in f if line.strip()]
-            # This handles custom entry logic as per your original code
-            INFO_DIC.extend(custom)
-            INFO_DIC = list(set(INFO_DIC))
-            logging.info(f"Appended {len(custom)} custom entries")
+            active_prefixes = list(dict.fromkeys(active_prefixes + custom))
+            logging.info(f"Appended {len(custom)} custom prefix entries")
         except Exception as e:
             logging.warning(f"Failed to load custom dict: {e}")
 
@@ -272,5 +299,5 @@ if __name__ == '__main__':
     if proxies:
         logging.info(f"Using proxy: {proxies.get('http', 'None')}")
 
-    scan_targets(targets, args.max_workers if hasattr(args, 'max_workers') else args.max_threads, timeout, proxies, output_path)
+    scan_targets(targets, args.max_threads, timeout, proxies, output_path, active_prefixes)
     logging.info("Scan completed")
