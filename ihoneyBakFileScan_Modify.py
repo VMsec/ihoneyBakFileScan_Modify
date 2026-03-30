@@ -422,6 +422,7 @@ def scan_targets(
             print(f"[{idx}/{len(targets)}] {base_url}")
             accessible, reason = is_site_accessible(base_url, session, connect_timeout, read_timeout, proxies)
             if not accessible:
+                print(f"  -> skip: {reason}")
                 continue
 
             not_found_fingerprint = get_not_found_fingerprint(base_url, session, connect_timeout, read_timeout, proxies)
@@ -431,6 +432,7 @@ def scan_targets(
             total_candidates += site_count
 
             if site_count == 0:
+                print("  -> skip: no candidates generated")
                 continue
 
             with tqdm(total=site_count, desc=f"Scanning {base_url}", unit="req", leave=False) as pbar:
@@ -475,6 +477,7 @@ def scan_targets(
                             timeout_count += 1
                             if timeout_count > max_timeouts:
                                 site_aborted = True
+                                print(f"  -> skip: too many timeouts ({timeout_count}>{max_timeouts})")
                                 for pending in in_flight:
                                     pending.cancel()
                                 in_flight.clear()
