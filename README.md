@@ -73,6 +73,9 @@ https://www.baidu.com → ['www.baidu.com', 'wwwbaiducom', 'www_baidu_com', 'bai
   -h, --help            显示帮助
   -f, --url-file        批量 URL 文件（每行一个）
   -t, --thread          最大线程数（默认 20，建议 100-200）
+  --connect-timeout     TCP 连接超时秒数（默认 3）
+  --read-timeout        响应头/读取超时秒数（默认 10）
+  --max-timeouts        单站候选请求超时超过该值后跳过该站（默认 10）
   -u, --url             单站点 URL
   -d, --dict-file       自定义文件名字典文件（追加到默认字典）
   -o, --output-file     输出结果文件（默认 result.txt）
@@ -80,6 +83,9 @@ https://www.baidu.com → ['www.baidu.com', 'wwwbaiducom', 'www_baidu_com', 'bai
 
 # 批量扫描
 python3 ihoneyBakFileScan_Modify.py -t 150 -f targets.txt -o leaks.txt
+
+# 批量扫描 + 超时控制
+python3 ihoneyBakFileScan_Modify.py -t 100 --connect-timeout 3 --read-timeout 10 --max-timeouts 10 -f targets.txt -o leaks.txt
 
 # 单站点 + 代理 + 自定义字典
 python3 ihoneyBakFileScan_Modify.py -u https://target.com -t 100 -p socks5h://127.0.0.1:1080 -d mydict.txt -o result.txt
@@ -101,5 +107,3 @@ python3 ihoneyBakFileScan_Modify.py -u https://target.com -t 100 -p socks5h://12
 # 4. 注意事项
 
 仅限合法授权测试使用，严禁非法扫描。
-高线程数可能触发 WAF 或连接池警告，建议从 -t 50 开始测试。
-如果出现 Connection pool is full 警告，可在代码中增大 pool_maxsize=50。
