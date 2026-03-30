@@ -2,8 +2,10 @@
 import requests
 import logging
 import threading
+import uuid
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from contextlib import closing
 from urllib.parse import urljoin, urlparse
 from fake_useragent import UserAgent
 from humanize import naturalsize
@@ -15,13 +17,100 @@ from requests.adapters import HTTPAdapter
 requests.packages.urllib3.disable_warnings()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s | %(levelname)-5s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S"
 )
 
 ua = UserAgent()
 OUTPUT_LOCK = threading.Lock()
+
+
+def build_session(max_workers: int) -> requests.Session:
+    session = requests.Session()
+    session.verify = False
+
+    pool_size = max(50, max_workers)
+    # Disable retries for large-scale scans to avoid timeout amplification.
+    adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size, max_retries=0)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
+
+def make_headers() -> Dict[str, str]:
+    return {
+        'User-Agent': ua.random,
+        'Accept-Encoding': 'identity'
+    }
+
+
+def make_range_headers() -> Dict[str, str]:
+    headers = make_headers()
+    headers['Range'] = 'bytes=0-63'
+    return headers
+
+
+def normalize_header_value(value: str) -> str:
+    return value.strip().lower()
+
+
+def get_candidate_suffix(url: str) -> str:
+    path = urlparse(url).path.lower()
+    for suffix in sorted(SUFFIX_FORMAT, key=len, reverse=True):
+        if path.endswith(suffix):
+            return suffix
+    return ''
+
+
+def has_download_disposition(resp: requests.Response) -> bool:
+    content_disposition = resp.headers.get('Content-Disposition', '').lower()
+    return 'attachment' in content_disposition or 'filename=' in content_disposition
+
+
+def is_probably_redirect_trap(resp: requests.Response) -> bool:
+    if resp.status_code not in {301, 302, 303, 307, 308}:
+        return False
+
+    location = resp.headers.get('Location', '').lower()
+    trap_keywords = ('login', 'signin', 'index.', 'home', 'default', 'error', '404')
+    return any(keyword in location for keyword in trap_keywords)
+
+
+def looks_like_text_backup(suffix: str, content_type: str) -> bool:
+    text_like_suffixes = {'.sql', '.bak.sql', '.dump', '.dump.sql', '.sql.bak'}
+    return suffix in text_like_suffixes and any(
+        token in content_type for token in ('text/plain', 'application/sql', 'application/octet-stream')
+    )
+
+
+def has_known_magic(sample: bytes, suffix: str) -> bool:
+    checks = {
+        '.zip': lambda data: data.startswith(b'PK\x03\x04') or data.startswith(b'PK\x05\x06') or data.startswith(b'PK\x07\x08'),
+        '.jar': lambda data: data.startswith(b'PK\x03\x04'),
+        '.war': lambda data: data.startswith(b'PK\x03\x04'),
+        '.gz': lambda data: data.startswith(b'\x1f\x8b\x08'),
+        '.sql.gz': lambda data: data.startswith(b'\x1f\x8b\x08'),
+        '.tgz': lambda data: data.startswith(b'\x1f\x8b\x08'),
+        '.tar.gz': lambda data: data.startswith(b'\x1f\x8b\x08'),
+        '.bz2': lambda data: data.startswith(b'BZh'),
+        '.tar.bz2': lambda data: data.startswith(b'BZh'),
+        '.xz': lambda data: data.startswith(b'\xfd7zXZ\x00'),
+        '.txz': lambda data: data.startswith(b'\xfd7zXZ\x00'),
+        '.tar.xz': lambda data: data.startswith(b'\xfd7zXZ\x00'),
+        '.7z': lambda data: data.startswith(b"7z\xbc\xaf'\x1c"),
+        '.rar': lambda data: data.startswith(b'Rar!\x1a\x07\x00') or data.startswith(b'Rar!\x1a\x07\x01\x00'),
+        '.sqlite': lambda data: data.startswith(b'SQLite format 3\x00'),
+        '.sqlite3': lambda data: data.startswith(b'SQLite format 3\x00'),
+        '.db': lambda data: data.startswith(b'SQLite format 3\x00'),
+    }
+    checker = checks.get(suffix)
+    return checker(sample) if checker else False
+
+
+def is_likely_text_error(sample: bytes) -> bool:
+    probe = sample[:64].lower()
+    return any(token in probe for token in (b'<!doctype', b'<html', b'<head', b'<body', b'404', b'not found', b'access denied'))
 
 
 def is_likely_backup_response(resp: requests.Response) -> bool:
@@ -34,22 +123,72 @@ def is_likely_backup_response(resp: requests.Response) -> bool:
     )
 
 
+def build_response_fingerprint(resp: requests.Response, sample: bytes = b'') -> Dict[str, str]:
+    return {
+        'status': str(resp.status_code),
+        'content_type': normalize_header_value(resp.headers.get('Content-Type', '').split(';', 1)[0]),
+        'content_length': normalize_header_value(resp.headers.get('Content-Length', '')),
+        'location': normalize_header_value(resp.headers.get('Location', '')),
+        'sample': sample[:64].hex()
+    }
+
+
+def fingerprint_matches(resp: requests.Response, fingerprint: Optional[Dict[str, str]], sample: bytes = b'') -> bool:
+    if not fingerprint:
+        return False
+
+    current = build_response_fingerprint(resp, sample)
+
+    if current['status'] != fingerprint['status']:
+        return False
+
+    if fingerprint['location'] and current['location'] == fingerprint['location']:
+        return True
+
+    same_type = current['content_type'] == fingerprint['content_type']
+    same_length = fingerprint['content_length'] and current['content_length'] == fingerprint['content_length']
+    same_sample = fingerprint['sample'] and current['sample'] == fingerprint['sample']
+
+    if same_type and same_length:
+        return True
+
+    if same_type and same_sample:
+        return True
+
+    return False
+
+
 def is_site_accessible(
     url: str,
     session: requests.Session,
-    timeout: int,
+    connect_timeout: int,
+    read_timeout: int,
     proxies: Optional[Dict]
 ) -> Tuple[bool, str]:
     """Only skip when the target is unreachable at the network layer."""
     try:
-        session.get(
+        head_resp = session.head(
             url,
-            headers={'User-Agent': ua.random},
-            timeout=timeout,
+            headers=make_headers(),
+            timeout=(connect_timeout, read_timeout),
             verify=False,
-            allow_redirects=True,
+            allow_redirects=False,
             proxies=proxies
         )
+        with head_resp:
+            if head_resp.status_code < 500 or head_resp.status_code in {500, 501, 502, 503, 504}:
+                return True, f"http_status_{head_resp.status_code}"
+
+        with session.get(
+            url,
+            headers=make_headers(),
+            timeout=(connect_timeout, read_timeout),
+            verify=False,
+            allow_redirects=False,
+            stream=True,
+            proxies=proxies
+        ):
+            pass
         return True, "http_response_received"
     except requests.exceptions.SSLError as exc:
         return False, f"ssl_error: {exc}"
@@ -61,35 +200,164 @@ def is_site_accessible(
         return False, f"request_error: {exc}"
 
 
-def check_url(url: str, session: requests.Session, timeout: int, proxies: Optional[Dict], output_path: Path) -> None:
+def log_success(url: str, content_length: str, output_path: Path) -> None:
+    size_str = naturalsize(int(content_length), binary=True)
+    logging.warning(f"[ success ] {url}  size: {size_str}")
+
+    with OUTPUT_LOCK:
+        with open(output_path, 'a', encoding='utf-8') as f:
+            f.write(f"{url} size:{size_str}\n")
+
+
+def get_not_found_fingerprint(
+    base_url: str,
+    session: requests.Session,
+    connect_timeout: int,
+    read_timeout: int,
+    proxies: Optional[Dict]
+) -> Optional[Dict[str, str]]:
+    marker = f"__ihoney_not_found__{uuid.uuid4().hex}.txt"
+    probe_url = urljoin(base_url.rstrip('/') + '/', marker)
+
     try:
-        with session.get(
-            url,
-            headers={'User-Agent': ua.random},
-            timeout=timeout,
+        head_resp = session.head(
+            probe_url,
+            headers=make_headers(),
+            timeout=(connect_timeout, read_timeout),
+            allow_redirects=False,
+            verify=False,
+            proxies=proxies
+        )
+        with head_resp:
+            if head_resp.status_code in {404, 410, 301, 302, 303, 307, 308, 200, 403}:
+                return build_response_fingerprint(head_resp)
+    except requests.RequestException:
+        pass
+
+    try:
+        with closing(session.get(
+            probe_url,
+            headers=make_range_headers(),
+            timeout=(connect_timeout, read_timeout),
             allow_redirects=False,
             stream=True,
             verify=False,
             proxies=proxies
-        ) as resp:
+        )) as resp:
+            sample = resp.raw.read(64, decode_content=False)
+            return build_response_fingerprint(resp, sample)
+    except requests.RequestException:
+        return None
+
+
+def assess_head_response(resp: requests.Response, url: str, not_found_fingerprint: Optional[Dict[str, str]]) -> Tuple[bool, bool]:
+    suffix = get_candidate_suffix(url)
+    content_type = resp.headers.get('Content-Type', '').lower()
+    content_length = resp.headers.get('Content-Length')
+
+    if fingerprint_matches(resp, not_found_fingerprint):
+        return False, False
+
+    if resp.status_code in {404, 410}:
+        return False, False
+
+    if is_probably_redirect_trap(resp):
+        return False, False
+
+    if has_download_disposition(resp) and content_length and int(content_length) > 0:
+        return True, False
+
+    if is_likely_backup_response(resp) and content_length and int(content_length) > 0:
+        return True, False
+
+    if looks_like_text_backup(suffix, content_type) and content_length and int(content_length) > 0:
+        return True, False
+
+    should_fallback = (
+        resp.status_code in {200, 206, 301, 302, 303, 307, 308, 403, 405, 501} or
+        not content_length
+    )
+    return False, should_fallback
+
+
+def check_url(
+    url: str,
+    session: requests.Session,
+    connect_timeout: int,
+    read_timeout: int,
+    proxies: Optional[Dict],
+    output_path: Path,
+    not_found_fingerprint: Optional[Dict[str, str]]
+) -> Optional[str]:
+    try:
+        head_resp = session.head(
+            url,
+            headers=make_headers(),
+            timeout=(connect_timeout, read_timeout),
+            allow_redirects=False,
+            verify=False,
+            proxies=proxies
+        )
+        with head_resp:
+            is_hit, should_fallback = assess_head_response(head_resp, url, not_found_fingerprint)
+            if is_hit:
+                log_success(url, head_resp.headers['Content-Length'], output_path)
+                return None
+            if not should_fallback:
+                return None
+
+        suffix = get_candidate_suffix(url)
+        with closing(session.get(
+            url,
+            headers=make_range_headers(),
+            timeout=(connect_timeout, read_timeout),
+            allow_redirects=False,
+            stream=True,
+            verify=False,
+            proxies=proxies
+        )) as resp:
+            sample = b''
+
+            if fingerprint_matches(resp, not_found_fingerprint):
+                return None
+
+            if resp.status_code in {404, 410} or is_probably_redirect_trap(resp):
+                return None
+
             if not is_likely_backup_response(resp):
-                return
+                content_type = resp.headers.get('Content-Type', '').lower()
+                if not has_download_disposition(resp) and not looks_like_text_backup(suffix, content_type):
+                    return None
 
             cl = resp.headers.get('Content-Length')
-            if not cl or int(cl) <= 0:
-                return
+            if cl and int(cl) > 0 and (has_download_disposition(resp) or is_likely_backup_response(resp)):
+                log_success(url, cl, output_path)
+                return None
 
-            size_str = naturalsize(int(cl), binary=True)
-            logging.warning(f"[ success ] {url}  size: {size_str}")
+            sample = resp.raw.read(64, decode_content=False)
+            if not sample:
+                return None
 
-            with OUTPUT_LOCK:
-                with open(output_path, 'a', encoding='utf-8') as f:
-                    f.write(f"{url} size:{size_str}\n")
+            if fingerprint_matches(resp, not_found_fingerprint, sample):
+                return None
 
+            if has_known_magic(sample, suffix):
+                size_value = cl if cl and int(cl) > 0 else str(len(sample))
+                log_success(url, size_value, output_path)
+                return None
+
+            if looks_like_text_backup(suffix, resp.headers.get('Content-Type', '').lower()) and not is_likely_text_error(sample):
+                size_value = cl if cl and int(cl) > 0 else str(len(sample))
+                log_success(url, size_value, output_path)
+        return None
+
+    except requests.exceptions.Timeout:
+        return 'timeout'
     except requests.RequestException:
-        pass
+        return None
     except Exception as e:
         logging.debug(f"[err] {url} → {str(e)}")
+        return None
 
 
 def generate_candidates(base_url: str, prefixes: List[str], suffixes: List[str]) -> List[str]:
@@ -137,51 +405,89 @@ def generate_candidates(base_url: str, prefixes: List[str], suffixes: List[str])
 def scan_targets(
     targets: List[str],
     max_workers: int,
-    timeout: int,
+    connect_timeout: int,
+    read_timeout: int,
+    max_timeouts: int,
     proxies: Optional[Dict],
     output_path: Path,
     prefixes: List[str]
 ) -> None:
-    session = requests.Session()
-    session.verify = False
-
-    pool_size = max(50, max_workers)
-    adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size, max_retries=2)
-    session.mount('http://', adapter)
-    session.mount('https://', adapter)
+    session = build_session(max_workers)
 
     total_candidates = 0
     total_scanned = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for idx, base_url in enumerate(targets, 1):
-            logging.info(f"[{idx}/{len(targets)}] Checking connectivity for {base_url}...")
-            accessible, reason = is_site_accessible(base_url, session, timeout, proxies)
+            print(f"[{idx}/{len(targets)}] {base_url}")
+            accessible, reason = is_site_accessible(base_url, session, connect_timeout, read_timeout, proxies)
             if not accessible:
-                logging.error(f"[{idx}/{len(targets)}] {base_url} is unreachable ({reason}). Skipping...")
                 continue
+
+            not_found_fingerprint = get_not_found_fingerprint(base_url, session, connect_timeout, read_timeout, proxies)
 
             candidates = generate_candidates(base_url, prefixes, SUFFIX_FORMAT)
             site_count = len(candidates)
             total_candidates += site_count
 
-            logging.info(f"[{idx}/{len(targets)}] {base_url} - Generated {site_count} candidates")
-
             if site_count == 0:
-                logging.warning(f"[{idx}/{len(targets)}] {base_url} - No candidates generated (可能为无效域名/IP)")
                 continue
 
             with tqdm(total=site_count, desc=f"Scanning {base_url}", unit="req", leave=False) as pbar:
-                for _ in executor.map(
-                    lambda candidate: check_url(candidate, session, timeout, proxies, output_path),
-                    candidates
-                ):
-                    pbar.update(1)
-                    total_scanned += 1
+                max_in_flight = max(max_workers, min(max_workers * 2, 200))
+                candidate_iter = iter(candidates)
+                in_flight = set()
+                timeout_count = 0
+                site_aborted = False
 
-            logging.info(f"[{idx}/{len(targets)}] {base_url} - Finished {site_count} candidates")
+                def submit_next() -> bool:
+                    if site_aborted:
+                        return False
+                    try:
+                        candidate = next(candidate_iter)
+                    except StopIteration:
+                        return False
 
-    logging.info(f"Scan completed | Total candidates: {total_candidates} | Scanned: {total_scanned}")
+                    future = executor.submit(
+                        check_url,
+                        candidate,
+                        session,
+                        connect_timeout,
+                        read_timeout,
+                        proxies,
+                        output_path,
+                        not_found_fingerprint
+                    )
+                    in_flight.add(future)
+                    return True
+
+                for _ in range(min(max_in_flight, site_count)):
+                    if not submit_next():
+                        break
+
+                while in_flight:
+                    done, in_flight = wait(in_flight, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        result = future.result()
+                        pbar.update(1)
+                        total_scanned += 1
+                        if result == 'timeout':
+                            timeout_count += 1
+                            if timeout_count > max_timeouts:
+                                site_aborted = True
+                                for pending in in_flight:
+                                    pending.cancel()
+                                in_flight.clear()
+                                skipped_count = sum(1 for _ in candidate_iter)
+                                if skipped_count:
+                                    pbar.update(skipped_count)
+                                    total_scanned += skipped_count
+                                break
+                        submit_next()
+                    if site_aborted:
+                        break
+
+    print(f"Scan completed | Total candidates: {total_candidates} | Scanned: {total_scanned}")
 
 
 # ────────────────────────────────────────────────
@@ -251,6 +557,9 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dict-file', dest='dict_file', nargs='?', help="Example: dict.txt")
     parser.add_argument('-o', '--output-file', dest="output_file", help="Example: result.txt")
     parser.add_argument('-p', '--proxy', dest="proxy", help="Example: socks5://127.0.0.1:1080 or socks5://user:pass@host:port")
+    parser.add_argument('--connect-timeout', dest='connect_timeout', type=int, default=3, help="TCP connect timeout in seconds (default: 3)")
+    parser.add_argument('--read-timeout', dest='read_timeout', type=int, default=10, help="Response header/read timeout in seconds (default: 10)")
+    parser.add_argument('--max-timeouts', dest='max_timeouts', type=int, default=10, help="Skip a site after this many candidate timeouts (default: 10)")
 
     args = parser.parse_args()
 
@@ -288,16 +597,26 @@ if __name__ == '__main__':
             with open(args.dict_file, encoding='utf-8') as f:
                 custom = [line.strip() for line in f if line.strip()]
             active_prefixes = list(dict.fromkeys(active_prefixes + custom))
-            logging.info(f"Appended {len(custom)} custom prefix entries")
         except Exception as e:
             logging.warning(f"Failed to load custom dict: {e}")
 
-    # Set timeout to 15 seconds
-    timeout = 15
+    if args.connect_timeout < 1:
+        parser.error("--connect-timeout must be greater than 0")
+    if args.read_timeout < 1:
+        parser.error("--read-timeout must be greater than 0")
+    if args.max_timeouts < 1:
+        parser.error("--max-timeouts must be greater than 0")
 
-    logging.info(f"Starting scan | Targets: {len(targets)} | Threads: {args.max_threads} | Output: {output_path}")
-    if proxies:
-        logging.info(f"Using proxy: {proxies.get('http', 'None')}")
+    connect_timeout = args.connect_timeout
+    read_timeout = args.read_timeout
 
-    scan_targets(targets, args.max_threads, timeout, proxies, output_path, active_prefixes)
-    logging.info("Scan completed")
+    scan_targets(
+        targets,
+        args.max_threads,
+        connect_timeout,
+        read_timeout,
+        args.max_timeouts,
+        proxies,
+        output_path,
+        active_prefixes
+    )
